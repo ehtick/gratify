@@ -328,6 +328,7 @@ export class Runtime<TDoc, TIntent> {
     }
     // The focused part goes first: its own keys map wins; otherwise Enter and
     // Space activate it (route to its press behaviors); Escape releases focus.
+    let focusCleared = false;
     if (this.focus) {
       if (this.tryKeys(this.focus, k)) return true;
       if (k === "Enter" || k === " ") {
@@ -337,7 +338,11 @@ export class Runtime<TDoc, TIntent> {
         }
         if (fired) { this.wake(); return true; }
       }
-      if (k === "Escape") { this.focus = null; this.wake(); return true; }
+      // Escape releases focus but KEEPS ROUTING: apps use root-level Escape
+      // maps (dismiss palettes/overlays) that must still fire on the same
+      // press — a focused part would otherwise swallow the first Esc. The
+      // clear itself still counts as consumed for preventDefault purposes.
+      if (k === "Escape") { this.focus = null; this.wake(); focusCleared = true; }
     }
     // then the hover chain, then the root
     const chain: Instance[] = [];
@@ -347,7 +352,7 @@ export class Runtime<TDoc, TIntent> {
     for (const inst of chain) {
       if (inst !== this.focus && this.tryKeys(inst, k)) return true;
     }
-    return false;
+    return focusCleared;
   }
 
   /** Run the first matching `keys` interactor on one instance. */

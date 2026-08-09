@@ -1,4 +1,4 @@
-import{p as s,v as r,F as p,d as a,l as u,m as d,S as m,L as i,R as h}from"./runtime-BPRGWDPy.js";import{a as v}from"./source-panel-CSqvtNlY.js";const b=`// ============================================================================
+import{p as s,v as r,F as p,d as a,l as u,m as d,S as m,L as i,R as h}from"./runtime-SYGMWnMk.js";import{a as v}from"./source-panel-CSqvtNlY.js";const b=`// ============================================================================
 // Example: focus-semantics — the three upstream-B seams on one page.
 //
 //   1. Focus model — every control here is Focusable(). Tab / Shift-Tab walk

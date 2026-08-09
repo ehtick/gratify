@@ -1,4 +1,4 @@
-import{p as l,m,S as u,L as h,q as p,F as g,K as f,G as x,v as i,h as w,c as b}from"./runtime-BPRGWDPy.js";import{a as v}from"./source-panel-CSqvtNlY.js";const y=`// ============================================================================
+import{p as l,m,S as u,L as h,q as p,F as g,K as f,G as x,v as i,h as w,c as b}from"./runtime-SYGMWnMk.js";import{a as v}from"./source-panel-CSqvtNlY.js";const y=`// ============================================================================
 // Example: keyboard-and-drag — three interactors composed on ONE part.
 //
 // Each row in the list carries:
