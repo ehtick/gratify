@@ -10,6 +10,7 @@ import { Measure, Painter } from "./painter";
 import { Tokens } from "./theme";
 import type { Element } from "./scene";
 import type { GestureSpec, Intentish, Interactor } from "./interact";
+import type { IslandSpec } from "./island";
 
 /** Animated channel values on a node. Missing keys read as 0 via cval(). */
 export type Channels = Record<string, number>;
@@ -150,6 +151,13 @@ export interface PartSpec<P, S = Record<string, unknown>, L = unknown> {
    *  on the overlay layer, above all content, and may carry their own
    *  interactors. Append to this list on any part with `addAdorn(...)`. */
   adorn?(node: GNode<P>): Element[];
+  /** DOM island (guide §5e): a real DOM element glued to a world rect through
+   *  pan/zoom — text editing's caret/selection/IME/clipboard stay the
+   *  browser's. Runs every frame; return null to hide. `el` must be a stable
+   *  identity (create it once, close over it) — the runtime hosts it in a
+   *  layer above the canvas, syncs a top-left-origin translate+scale, and
+   *  detaches it when the facet hides or the part unmounts. */
+  island?(node: GNode<P>): IslandSpec | null;
 }
 
 export interface PartDef<P, S = Record<string, unknown>> extends PartSpec<P, S> {
@@ -199,7 +207,7 @@ type Cap =
   | "size" | "intrinsic" | "measure" | "arrange" | "fill" | "pack" | "body"
   | "style" | "render"
   | "channels" | "on" | "press" | "drag1d" | "gesture" | "keys"
-  | "adorn" | "anchors" | "hit"
+  | "adorn" | "island" | "anchors" | "hit"
   | "local" | "reduce";
 
 type LayoutCap = "size" | "intrinsic" | "measure" | "arrange" | "fill" | "pack" | "body";
@@ -287,6 +295,9 @@ interface BuilderMethods<P, F, S, C extends Cap, K extends string, L> {
   keys(map: Record<string, (node: GNode<F, K, L>) => Intentish>): PartBuilder<P, F, S, Done<C, never>, K, L>;
   /** Append adornments. Repeatable; earlier adorns run first. */
   adorn(f: (node: GNode<F, K, L>) => Element[]): PartBuilder<P, F, S, Done<C, never>, K, L>;
+  /** DOM island: glue a stable DOM element to a world rect through pan/zoom
+   *  (guide §5e). Return null to hide. One per part. */
+  island(f: (node: GNode<F, K, L>) => IslandSpec | null): PartBuilder<P, F, S, Done<C, "island">, K, L>;
   /** Published world-space anchor points. */
   anchors(f: (node: GNode<F, K, L>) => { id: string; pos: Vec; meta?: unknown }[]):
     PartBuilder<P, F, S, Done<C, "anchors">, K, L>;
@@ -337,6 +348,7 @@ function builderOf(def: PartDef<any, any>): any {
   b.gesture = (spec: any) => addI({ kind: "gesture", spec });
   b.keys = (map: any) => addI({ kind: "keys", map });
   b.adorn = (f: any) => chain({ adorn: def.adorn ? (n: any) => [...def.adorn!(n), ...f(n)] : f });
+  b.island = (f: any) => chain({ island: f });
   b.anchors = (f: any) => chain({ anchors: f });
   b.hit = (f: any) => chain({ hit: f });
   return b;

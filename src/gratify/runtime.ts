@@ -21,6 +21,7 @@ import { themeVersion, tickTheme } from "./theme";
 import { Fx } from "./fx";
 import { EffCache } from "./effective";
 import { AnyDef, expandBodies, LocalReader } from "./compose";
+import { islandCss, type IslandSpec } from "./island";
 import { layoutScene } from "./layout";
 import { animateScene } from "./animate";
 import { renderScene } from "./draw";
@@ -35,6 +36,12 @@ export interface AppSpec<TDoc, TIntent> {
    *  detector cannot see. `time` is seconds since start (same clock as
    *  GNode.time). Return false once it settles so the scene can sleep again. */
   ambient?(doc: TDoc, time: number): boolean;
+  /** Optional: called after each COMMITTED update — `update` ran and the doc
+   *  actually changed (`doc !== prev`). The embedding seam: a host observes
+   *  "the doc changed" (persist, re-evaluate, sync an external engine)
+   *  without wrapping dispatch. `Local(...)` intents never reach `update`,
+   *  so drafts and dropdown-open flags stay invisible here. */
+  onCommit?(doc: TDoc, prev: TDoc): void;
 }
 
 export interface RuntimeOpts {
@@ -90,6 +97,8 @@ export class Runtime<TDoc, TIntent> {
   private adornRoot: Instance | null = null;
   private adornHosts = new Map<string, Instance>();   // adorn-root child key → host instance (routing bridge)
   private modalInst: Instance | null = null;          // topmost modal adornment, if any
+  private islandLayer: HTMLElement | null = null;     // DOM layer over the canvas hosting islands
+  private islands = new Map<string, HTMLElement>();   // island key path → mounted element
   private panDrag: { pan0: Vec; p0: Vec } | null = null;
   private focus: Instance | null = null;
   private anchorMap = new Map<string, Anchor>();
@@ -111,7 +120,9 @@ export class Runtime<TDoc, TIntent> {
       console.warn("gratify: Local(...) intent sent to dispatch() — local intents route from a node; emit them from an interactor instead. Dropped:", unwrapLocal(i));
       return;
     }
+    const prev = this.doc;
     this.doc = this.app.update(this.doc, i); this.dirty = true; this.wake();
+    if (this.doc !== prev) this.app.onCommit?.(this.doc, prev);
   };
   spawnFx(f: Fx) { this.fx.push(f); this.wake(); }
 
@@ -158,7 +169,11 @@ export class Runtime<TDoc, TIntent> {
   }
   /** Advance n deterministic frames (headless testing / golden frames). */
   step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) this.tick(dt); }
-  stop() { this.stopped = true; }
+  stop() {
+    this.stopped = true;
+    this.islandLayer?.remove(); this.islandLayer = null;
+    this.islands.clear();
+  }
 
   /** Whether the scene is still animating (drove the last frame's decision to
    *  schedule another). False means the loop has gone to sleep at rest. */
@@ -336,6 +351,7 @@ export class Runtime<TDoc, TIntent> {
     // has animated; they get their own enter/exit/hover via animateScene.
     this.syncAdornments(dt, eff);
     if (this.adornRoot) animateScene(this.adornRoot, dt, env);
+    this.syncIslands();
     for (const f of this.fx) f.update(dt);
     this.fx = this.fx.filter((f) => !f.done);
     this.prune(this.root);
@@ -409,6 +425,44 @@ export class Runtime<TDoc, TIntent> {
     // the topmost (last in paint order) LIVE modal adornment owns modal capture
     this.modalInst = null;
     if (this.adornRoot) walk(this.adornRoot, (i) => { if (i.el.modal && !i.exiting) this.modalInst = i; });
+  }
+
+  // ---- islands (DOM glued to world rects, guide §5e) ---------------------------
+  /** Collect island facets and pin each element over its world rect via a
+   *  top-left-origin translate+scale (the pure `islandCss`). Runs every frame
+   *  the loop is awake, so pan/zoom/rect motion all track; keys are the full
+   *  instance path so two hosts with the same sibling key cannot collide.
+   *  A facet returning null (or a vanished part) detaches its element. */
+  private syncIslands() {
+    const live = new Set<string>();
+    const collect = (inst: Instance, path: string) => {
+      const part = this.effs.get(inst);
+      if (part.island) {
+        const spec = part.island(this.nodeOf(inst));
+        if (spec) { live.add(path); this.placeIsland(path, spec); }
+      }
+      for (const c of inst.children) collect(c, `${path}/${c.key}`);
+    };
+    collect(this.root, this.root.key);
+    for (const [key, el] of this.islands) {
+      if (!live.has(key)) { el.remove(); this.islands.delete(key); }
+    }
+  }
+
+  private placeIsland(key: string, spec: IslandSpec) {
+    const prev = this.islands.get(key);
+    if (prev !== spec.el) {                    // fresh island (or the el swapped)
+      prev?.remove();
+      this.islands.set(key, spec.el);
+      const s = spec.el.style;
+      s.position = "absolute"; s.left = "0"; s.top = "0";
+      s.transformOrigin = "0 0"; s.pointerEvents = "auto";
+      this.islandLayer?.appendChild(spec.el);
+    }
+    const css = islandCss(spec.rect, this.viewport);
+    const s = spec.el.style;
+    s.width = css.width; s.height = css.height;
+    if (s.transform !== css.transform) s.transform = css.transform;
   }
 
   // ---- node capability record ------------------------------------------------
@@ -519,11 +573,23 @@ export class Runtime<TDoc, TIntent> {
   // ---- DOM wiring + wake/sleep -------------------------------------------------
   private attach(canvas: HTMLCanvasElement) {
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Island layer: hosts DOM elements glued to world rects (guide §5e). It
+    // sits over the canvas, clips to it, and passes pointer events through —
+    // each island element re-enables them for itself.
+    const layer = document.createElement("div");
+    layer.style.cssText = "position:absolute;overflow:hidden;pointer-events:none;";
+    const host = canvas.parentElement ?? document.body;
+    if (getComputedStyle(host).position === "static") host.style.position = "relative";
+    host.appendChild(layer);
+    this.islandLayer = layer;
     const resize = () => {
       const w = canvas.clientWidth, h = canvas.clientHeight;
       if (!w || !h) return;
       canvas.width = Math.floor(w * this.dpr); canvas.height = Math.floor(h * this.dpr);
       this.viewW = w; this.viewH = h;
+      const ls = layer.style;
+      ls.left = `${canvas.offsetLeft}px`; ls.top = `${canvas.offsetTop}px`;
+      ls.width = `${w}px`; ls.height = `${h}px`;
       this.wake();
     };
     resize();

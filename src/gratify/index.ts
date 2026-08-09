@@ -31,5 +31,6 @@ export * from "./compose";
 export * from "./fx";
 export * from "./particles";
 export * from "./effects";
+export * from "./island";
 export * from "./middleware";
 export * from "./runtime";

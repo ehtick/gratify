@@ -2,20 +2,22 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Gratify — node editor</title>
+  <title>Gratify — island</title>
   <style>
     body { margin: 0; overflow: hidden; background: #12141a; }
-    canvas { display: block; touch-action: none; }
+    canvas { position: fixed; inset: 0; display: block; width: 100vw; height: 100vh; touch-action: none; }
     a.back { position: fixed; top: 10px; left: 14px; color: #828a9c; font: 13px system-ui; text-decoration: none; z-index: 10; }
     a.back:hover { color: #40baff; }
+    #status { position: fixed; bottom: 10px; left: 14px; color: #828a9c; font: 12px system-ui; z-index: 10;
+              max-width: 70vw; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   </style>
-  <script type="module" crossorigin src="../../assets/node-editor-BJh36ptn.js"></script>
+  <script type="module" crossorigin src="../../assets/island-BzOkNd01.js"></script>
   <link rel="modulepreload" crossorigin href="../../assets/runtime-Cy-xOfSA.js">
-  <link rel="modulepreload" crossorigin href="../../assets/effects-BSjThxz1.js">
   <link rel="modulepreload" crossorigin href="../../assets/source-panel-CSqvtNlY.js">
 </head>
 <body>
   <canvas id="c"></canvas>
   <a class="back" href="../../index.html">&larr; gallery</a>
+  <div id="status">onCommit — waiting for the first committed update</div>
 </body>
 </html>

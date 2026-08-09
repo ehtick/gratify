@@ -41,6 +41,10 @@ export function withUndo<TDoc, TIntent extends { kind: string }>(
       return { past: [...s.past, s.present].slice(-limit), present: next, future: [] };
     },
     view: (s): Element => app.view(s.present),
+    // The runtime-observed callbacks thread through, unwrapped to the app's
+    // doc — an embedder's onCommit sees plain docs whether or not undo wraps.
+    ambient: app.ambient && ((s, time) => app.ambient!(s.present, time)),
+    onCommit: app.onCommit && ((s, prev) => app.onCommit!(s.present, prev.present)),
   };
 }
 

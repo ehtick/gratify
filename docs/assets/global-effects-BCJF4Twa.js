@@ -1,4 +1,4 @@
-import{P as f,m as y,S as b,L as l,R as h}from"./runtime-BQ2Zsp_3.js";import{h as k,T as g,S as v,C as x,w as c,B as p,m as w}from"./widgets-xXDkx298.js";import{a as E}from"./source-panel-CSqvtNlY.js";import{w as S}from"./widgets-BJYGvrkn.js";const L=`// ============================================================================\r
+import{P as f,m as y,S as b,L as l,R as h}from"./runtime-Cy-xOfSA.js";import{h as k,T as g,S as v,C as x,w as c,B as p,m as w}from"./widgets-bPTZFe5K.js";import{a as E}from"./source-panel-CSqvtNlY.js";import{w as S}from"./widgets-BJYGvrkn.js";const L=`// ============================================================================\r
 // Example: global effects — ordinary controls, one effect over all of them.\r
 //\r
 // The controls here (Button, Toggle, Slider, Checkbox) are the STOCK shared\r

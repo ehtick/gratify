@@ -1,4 +1,4 @@
-import{p as c,l as m,r as d,G as g,v as h,c as f,P as v,j as b,m as x,x as y,S as k,L as a}from"./runtime-BQ2Zsp_3.js";import{S as I}from"./widgets-xXDkx298.js";import{a as z}from"./source-panel-CSqvtNlY.js";import{w as M}from"./widgets-BJYGvrkn.js";const S=`// ============================================================================
+import{p as c,n as m,r as d,G as g,v as h,c as f,P as v,j as b,m as x,x as y,S as k,L as a}from"./runtime-Cy-xOfSA.js";import{S as I}from"./widgets-bPTZFe5K.js";import{a as z}from"./source-panel-CSqvtNlY.js";import{w as M}from"./widgets-BJYGvrkn.js";const S=`// ============================================================================
 // Example: split-pane — custom layout parts, reflow, and live resize.
 //
 // Two custom layout containers, each ONE part() with measure/arrange — no

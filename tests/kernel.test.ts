@@ -941,3 +941,102 @@ describe("local state + modal capture", () => {
     warn.mockRestore();
   });
 });
+
+// ---- onCommit (the embedding seam: "the doc changed", without wrapping) ------
+describe("onCommit", () => {
+  it("fires after each committed update with (next, prev); unchanged docs stay silent", () => {
+    const seen: [number, number][] = [];
+    const rt = new Runtime<number, { kind: "inc" } | { kind: "noop" }>(null, {
+      init: 0,
+      update: (d, i) => (i.kind === "inc" ? d + 1 : d),
+      view: () => Stack("root", {}, []),
+      onCommit: (d, prev) => seen.push([d, prev]),
+    }, { headless: true });
+    rt.dispatch({ kind: "inc" });
+    rt.dispatch({ kind: "noop" });      // update returned the same doc → no commit
+    rt.dispatch({ kind: "inc" });
+    expect(seen).toEqual([[1, 0], [2, 1]]);
+  });
+
+  it("threads through withUndo unwrapped: the embedder sees plain docs, and undo commits too", () => {
+    const seen: [number, number][] = [];
+    const rt = new Runtime(null, withUndo<number, { kind: "inc" }>({
+      init: 0,
+      update: (d) => d + 1,
+      view: () => Stack("root", {}, []),
+      onCommit: (d, prev) => seen.push([d, prev]),
+    }), { headless: true });
+    rt.dispatch({ kind: "inc" });
+    rt.dispatch({ kind: "undo" });
+    rt.dispatch({ kind: "undo" });      // past exhausted → same state → silent
+    expect(seen).toEqual([[1, 0], [0, 1]]);
+  });
+});
+
+// ---- islands (DOM glued to world rects, guide §5e) ---------------------------
+import { islandCss, rect as mkRect, Pan as PanI } from "../src/gratify";
+
+describe("islands", () => {
+  it("islandCss: world rect + camera → top-left-origin translate+scale at world size", () => {
+    expect(islandCss(mkRect(100, 50, 120, 30), { pan: v(0, 0), zoom: 1 })).toEqual({
+      width: "120px", height: "30px", transform: "translate(100px, 50px) scale(1)",
+    });
+    // pan (7,-3), zoom 2: x' = 100·2+7 = 207, y' = 50·2−3 = 97; SIZE stays the
+    // world size — the transform scales it, so text wraps identically per zoom.
+    expect(islandCss(mkRect(100, 50, 120, 30), { pan: v(7, -3), zoom: 2 })).toEqual({
+      width: "120px", height: "30px", transform: "translate(207px, 97px) scale(2)",
+    });
+  });
+
+  it("island facet: element is pinned, pan retransforms it, hide and unmount detach it", () => {
+    type FakeEl = HTMLElement & { style: Record<string, string>; removed: boolean };
+    const fakeEl = (): FakeEl =>
+      ({ style: {}, removed: false, remove() { (this as { removed: boolean }).removed = true; } }) as unknown as FakeEl;
+    const el = fakeEl();
+
+    const IslandCard = part("island-card")
+      .props<{ el: HTMLElement; show: boolean }>()
+      .size(() => v(100, 40))
+      .render(() => {})
+      .island((n) => n.props.show
+        ? { el: n.props.el, rect: mkRect(n.rect.x + 10, n.rect.y + 10, 80, 20) }
+        : null);
+    const Surf = part("island-surf").props<Record<string, never>>().fill()
+      .hit(() => true).render(() => {}).on(PanI());
+
+    interface D { show: boolean; mounted: boolean }
+    type I = { kind: "show"; on: boolean } | { kind: "unmount" };
+    const rt = new Runtime<D, I>(null, {
+      init: { show: true, mounted: true },
+      update: (d, i) => (i.kind === "show" ? { ...d, show: i.on } : { ...d, mounted: false }),
+      view: (d) => Surf("root", {}, d.mounted ? [IslandCard("c", { el, show: d.show })] : []),
+    }, { headless: true, width: 400, height: 300 });
+
+    rt.step(3);
+    expect(el.style.position).toBe("absolute");
+    expect(el.style.transformOrigin).toBe("0 0");
+    expect(el.style.width).toBe("80px");
+    expect(el.style.transform).toBe("translate(10px, 10px) scale(1)");
+
+    // pan the surface under it: the transform follows the camera
+    rt.pointerDown({ x: 300, y: 200 });
+    rt.pointerMove({ x: 340, y: 230 });
+    rt.pointerUp({ x: 340, y: 230 });
+    rt.step(1);
+    expect(el.style.transform).toBe("translate(50px, 40px) scale(1)");
+
+    // facet returns null → detached; showing again re-pins the same element
+    rt.dispatch({ kind: "show", on: false });
+    rt.step(1);
+    expect(el.removed).toBe(true);
+    el.removed = false;
+    rt.dispatch({ kind: "show", on: true });
+    rt.step(1);
+    expect(el.style.transform).toBe("translate(50px, 40px) scale(1)");
+
+    // part unmounts → detached
+    rt.dispatch({ kind: "unmount" });
+    rt.step(1);
+    expect(el.removed).toBe(true);
+  });
+});

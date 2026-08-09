@@ -1,4 +1,4 @@
-import{P as m,y as w,m as f,S as v,L as d,s as S,t as b,c as x,v as y,R as T}from"./runtime-BQ2Zsp_3.js";import{h as u,w as l,T as p,S as h,C as c,m as E}from"./widgets-xXDkx298.js";import{b as G}from"./effects-Cqw43Sha.js";import{a as P}from"./source-panel-CSqvtNlY.js";import{w as R}from"./widgets-BJYGvrkn.js";const L=`// ============================================================================\r
+import{P as m,y as w,m as f,S as v,L as d,s as S,t as b,c as x,v as y,R as T}from"./runtime-Cy-xOfSA.js";import{h as u,w as l,T as p,S as h,C as c,m as E}from"./widgets-bPTZFe5K.js";import{b as G}from"./effects-BSjThxz1.js";import{a as P}from"./source-panel-CSqvtNlY.js";import{w as R}from"./widgets-BJYGvrkn.js";const L=`// ============================================================================\r
 // Example: toggles — custom widgets, springs, and a live theme cross-fade.\r
 //\r
 // What to look for when you run it:\r

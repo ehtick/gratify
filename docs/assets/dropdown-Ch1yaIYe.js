@@ -1,4 +1,4 @@
-import{p as i,v as o,c as d,g as c,i as g,a as x,j as m,d as k,k as y,R as u,L as l,m as b,S as v}from"./runtime-BQ2Zsp_3.js";import{w}from"./middleware-DyZMnhdR.js";import{B as h}from"./widgets-xXDkx298.js";import{a as S}from"./source-panel-CSqvtNlY.js";const L=`// ============================================================================
+import{p as i,v as o,c as d,g as c,i as g,a as x,j as m,d as k,k as y,R as u,L as l,m as b,S as v}from"./runtime-Cy-xOfSA.js";import{w}from"./middleware-DnFxgLOc.js";import{B as h}from"./widgets-bPTZFe5K.js";import{a as S}from"./source-panel-CSqvtNlY.js";const L=`// ============================================================================
 // Example: dropdown & local state — the M3 acceptance test.
 //
 // ACCEPTANCE: the \`Select\` below is defined entirely at its own site — one
