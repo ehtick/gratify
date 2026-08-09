@@ -540,7 +540,12 @@ export class Runtime<TDoc, TIntent> {
     canvas.addEventListener("pointerup", (ev) => this.pointerUp(pos(ev)));
     canvas.addEventListener("pointerleave", () => { this.pointer = null; this.wake(); });
     canvas.addEventListener("wheel", (ev) => { ev.preventDefault(); this.wheel(ev.deltaY, pos(ev)); }, { passive: false });
-    window.addEventListener("keydown", (ev) => this.key(ev.key));
+    // Keys typed into editable DOM (inputs, textareas, contenteditable overlays)
+    // belong to that element, not the canvas surface.
+    const editable = (t: EventTarget | null): boolean =>
+      t instanceof HTMLElement &&
+      (t.isContentEditable || t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT");
+    window.addEventListener("keydown", (ev) => { if (!editable(ev.target)) this.key(ev.key); });
 
     // debug hooks (deterministic stepping from the console)
     const w = window as unknown as Record<string, unknown>;
