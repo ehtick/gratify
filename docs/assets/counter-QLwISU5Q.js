@@ -1,4 +1,4 @@
-import{p as o,m as a,S as i,L as r,P as c,v as l}from"./runtime-Cy-xOfSA.js";import{a as u}from"./source-panel-CSqvtNlY.js";const h=`// ============================================================================
+import{p as o,m as a,S as i,L as r,P as c,v as l}from"./runtime-oXwbMIQ9.js";import{a as u}from"./source-panel-CSqvtNlY.js";const h=`// ============================================================================
 // Example: counter — the "Hello, Gratify" application.
 //
 // What to look for when you run it:

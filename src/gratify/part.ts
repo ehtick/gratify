@@ -11,6 +11,7 @@ import { Tokens } from "./theme";
 import type { Element } from "./scene";
 import type { GestureSpec, Intentish, Interactor } from "./interact";
 import type { IslandSpec } from "./island";
+import type { SemanticsInfo } from "./semantics";
 
 /** Animated channel values on a node. Missing keys read as 0 via cval(). */
 export type Channels = Record<string, number>;
@@ -158,6 +159,11 @@ export interface PartSpec<P, S = Record<string, unknown>, L = unknown> {
    *  layer above the canvas, syncs a top-left-origin translate+scale, and
    *  detaches it when the facet hides or the part unmounts. */
   island?(node: GNode<P>): IslandSpec | null;
+  /** Semantics slot (guide §3.11): what this part IS, for a future
+   *  accessibility layer. The runtime collects declared nodes into
+   *  `Runtime.semanticsTree()` — pure data (role/label/value + key + rect),
+   *  no DOM, no ARIA. Return null to omit the node. */
+  semantics?(node: GNode<P>): SemanticsInfo | null;
 }
 
 export interface PartDef<P, S = Record<string, unknown>> extends PartSpec<P, S> {
@@ -207,7 +213,7 @@ type Cap =
   | "size" | "intrinsic" | "measure" | "arrange" | "fill" | "pack" | "body"
   | "style" | "render"
   | "channels" | "on" | "press" | "drag1d" | "gesture" | "keys"
-  | "adorn" | "island" | "anchors" | "hit"
+  | "adorn" | "island" | "anchors" | "hit" | "semantics"
   | "local" | "reduce";
 
 type LayoutCap = "size" | "intrinsic" | "measure" | "arrange" | "fill" | "pack" | "body";
@@ -303,6 +309,10 @@ interface BuilderMethods<P, F, S, C extends Cap, K extends string, L> {
     PartBuilder<P, F, S, Done<C, "anchors">, K, L>;
   /** Custom hit test. */
   hit(f: (node: GNode<F, K, L>, p: Vec) => boolean): PartBuilder<P, F, S, Done<C, "hit">, K, L>;
+  /** Semantics slot (guide §3.11): declare role/label/value for the runtime's
+   *  queryable tree (`Runtime.semanticsTree()`). Data only — no DOM, no ARIA.
+   *  Return null to omit. One per part. */
+  semantics(f: (node: GNode<F, K, L>) => SemanticsInfo | null): PartBuilder<P, F, S, Done<C, "semantics">, K, L>;
 }
 
 /** A part under construction — already a usable part ctor at every step. */
@@ -351,6 +361,7 @@ function builderOf(def: PartDef<any, any>): any {
   b.island = (f: any) => chain({ island: f });
   b.anchors = (f: any) => chain({ anchors: f });
   b.hit = (f: any) => chain({ hit: f });
+  b.semantics = (f: any) => chain({ semantics: f });
   return b;
 }
 

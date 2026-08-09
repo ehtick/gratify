@@ -1,4 +1,4 @@
-import{c as h,a,m as E,S as R,L as p,R as g,e as S,f as T,b as w,v as o}from"./runtime-Cy-xOfSA.js";import{d as L,w as s,B as l,C as v,T as B,S as A,m as y}from"./widgets-bPTZFe5K.js";import{a as I}from"./source-panel-CSqvtNlY.js";import{w as P}from"./widgets-BJYGvrkn.js";const C=`// ============================================================================
+import{c as h,a,m as E,S as R,L as p,R as g,e as S,f as T,b as w,v as o}from"./runtime-oXwbMIQ9.js";import{d as L,w as s,B as l,C as v,T as B,S as A,m as y}from"./widgets-DhpEXluK.js";import{a as I}from"./source-panel-CSqvtNlY.js";import{w as P}from"./widgets-BJYGvrkn.js";const C=`// ============================================================================
 // Example: borders — a border is a DECORATION you layer onto any widget, not a
 // feature a widget builds in. Proves README §3 ("wrap, don't edit") with paint:
 // \`border(kind)\` is a \`PartExt\` built on \`mapRender\` — it paints its bevel over

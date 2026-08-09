@@ -22,6 +22,7 @@ import { Fx } from "./fx";
 import { EffCache } from "./effective";
 import { AnyDef, expandBodies, LocalReader } from "./compose";
 import { islandCss, type IslandSpec } from "./island";
+import type { SemanticsNode } from "./semantics";
 import { layoutScene } from "./layout";
 import { animateScene } from "./animate";
 import { renderScene } from "./draw";
@@ -301,28 +302,92 @@ export class Runtime<TDoc, TIntent> {
     this.wake();
   }
 
-  key(k: string) {
+  /** Keyboard input. Returns true when the key was CONSUMED (modal dismissed,
+   *  focus cycled/cleared, a keys map matched, or a synthetic press fired) —
+   *  the DOM wiring uses this to preventDefault, so Tab only leaves the
+   *  browser's hands when the canvas actually took it. */
+  key(k: string, mods?: Partial<Mods>): boolean {
+    if (mods) Object.assign(this.mods, mods);
     // modal capture: Escape dismisses the topmost modal adornment, consumed
     if (this.modalInst && k === "Escape") {
       this.dispatchFrom(this.modalInst, this.modalInst.el.modal?.dismiss);
       this.wake();
-      return;
+      return true;
     }
-    // focus first, then the hover chain, then the root
+    // Tab / Shift-Tab: cycle focus among Focusable() parts in document order
+    // (wrapping). Same focus the pointer sets — one arbiter, ch.focus rings it.
+    if (k === "Tab") {
+      const fs = this.focusables();
+      if (!fs.length) return false;
+      const idx = this.focus ? fs.indexOf(this.focus) : -1;
+      this.focus = this.mods.shift
+        ? fs[idx <= 0 ? fs.length - 1 : idx - 1]
+        : fs[(idx + 1) % fs.length];
+      this.wake();
+      return true;
+    }
+    // The focused part goes first: its own keys map wins; otherwise Enter and
+    // Space activate it (route to its press behaviors); Escape releases focus.
+    if (this.focus) {
+      if (this.tryKeys(this.focus, k)) return true;
+      if (k === "Enter" || k === " ") {
+        let fired = false;
+        for (const it of this.effs.get(this.focus).on ?? []) {
+          if (it.kind === "press") { this.dispatchFrom(this.focus, it.to(this.nodeOf(this.focus))); fired = true; }
+        }
+        if (fired) { this.wake(); return true; }
+      }
+      if (k === "Escape") { this.focus = null; this.wake(); return true; }
+    }
+    // then the hover chain, then the root
     const chain: Instance[] = [];
-    if (this.focus) chain.push(this.focus);
     let h = this.pointer ? this.renderHit(this.root, this.pointer) : null;
     while (h) { chain.push(h); h = h.parent ?? null; }
     if (!chain.includes(this.root)) chain.push(this.root);
     for (const inst of chain) {
-      for (const it of this.effs.get(inst).on ?? []) {
-        if (it.kind === "keys" && it.map[k]) {
-          this.dispatchFrom(inst, it.map[k](this.nodeOf(inst)));
-          this.wake();
-          return;
-        }
+      if (inst !== this.focus && this.tryKeys(inst, k)) return true;
+    }
+    return false;
+  }
+
+  /** Run the first matching `keys` interactor on one instance. */
+  private tryKeys(inst: Instance, k: string): boolean {
+    for (const it of this.effs.get(inst).on ?? []) {
+      if (it.kind === "keys" && it.map[k]) {
+        this.dispatchFrom(inst, it.map[k](this.nodeOf(inst)));
+        this.wake();
+        return true;
       }
     }
+    return false;
+  }
+
+  /** Every Focusable() part, in document (depth-first) order — the Tab ring. */
+  private focusables(): Instance[] {
+    const out: Instance[] = [];
+    walk(this.root, (i) => {
+      if (this.effs.get(i).on?.some((o) => o.kind === "focusable")) out.push(i);
+    });
+    return out;
+  }
+
+  /** Key of the currently focused instance (pointer press or Tab), or null.
+   *  The focused part's ch.focus channel eases toward 1 — the visual ring is
+   *  the part's own job. */
+  get focusedKey(): string | null { return this.focus?.key ?? null; }
+
+  /** The semantics tree (guide §3.11 — the "keep the slot open" layer): every
+   *  part that declared a `semantics` facet, nested in document order. Parts
+   *  without the facet are transparent — their semantic descendants surface to
+   *  the nearest semantic ancestor. Pure data (role/label/value + key path +
+   *  rect); a future accessibility layer mirrors it to DOM/ARIA, not this. */
+  semanticsTree(): SemanticsNode[] {
+    const rec = (inst: Instance, path: string): SemanticsNode[] => {
+      const info = this.effs.get(inst).semantics?.(this.nodeOf(inst));
+      const children = inst.children.flatMap((c) => rec(c, `${path}/${c.key}`));
+      return info ? [{ ...info, key: inst.key, path, rect: inst.rect, children }] : children;
+    };
+    return rec(this.root, this.root.key);
   }
 
   // ---- one frame -----------------------------------------------------------
@@ -414,6 +479,10 @@ export class Runtime<TDoc, TIntent> {
       for (const c of inst.children) collect(c);
     };
     collect(this.root);
+    // z-tiers: ascending, stable — equal tiers keep collection (document)
+    // order, so untiered apps paint exactly as before. Higher tiers draw
+    // later (above every lower tier across ALL hosts) and hit-test first.
+    kids.sort((a, b) => (a.tier ?? 0) - (b.tier ?? 0));
 
     if (kids.length || this.adornRoot?.children.length || this.adornRoot?.ghosts.length) {
       const rootEl: Element = { key: "__adorn", part: ADORN_ROOT, props: {}, children: kids, layer: "overlay" };
@@ -607,11 +676,13 @@ export class Runtime<TDoc, TIntent> {
     canvas.addEventListener("pointerleave", () => { this.pointer = null; this.wake(); });
     canvas.addEventListener("wheel", (ev) => { ev.preventDefault(); this.wheel(ev.deltaY, pos(ev)); }, { passive: false });
     // Keys typed into editable DOM (inputs, textareas, contenteditable overlays)
-    // belong to that element, not the canvas surface.
-    const editable = (t: EventTarget | null): boolean =>
-      t instanceof HTMLElement &&
-      (t.isContentEditable || t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT");
-    window.addEventListener("keydown", (ev) => { if (!editable(ev.target)) this.key(ev.key); });
+    // belong to that element, not the canvas surface: DOM focus WINS — Tab
+    // inside a DOM island stays native. Only when the canvas consumed the key
+    // (focus cycling, a keys map, a synthetic press) is the default suppressed.
+    window.addEventListener("keydown", (ev) => {
+      if (isEditableDom(ev.target)) return;
+      if (this.key(ev.key, { shift: ev.shiftKey, alt: ev.altKey, ctrl: ev.ctrlKey || ev.metaKey })) ev.preventDefault();
+    });
 
     // debug hooks (deterministic stepping from the console)
     const w = window as unknown as Record<string, unknown>;
@@ -642,6 +713,17 @@ export class Runtime<TDoc, TIntent> {
     requestAnimationFrame((t) => this.frame(t));
   }
 }
+
+/** Is this event target editable DOM (input, textarea, select, or
+ *  contenteditable)? Keys typed there belong to the browser — the window-level
+ *  keydown wiring consults this BEFORE Runtime.key, so DOM focus always takes
+ *  precedence over canvas focus. Structural (no instanceof), so headless tests
+ *  can assert the precedence without a DOM. */
+export const isEditableDom = (t: unknown): boolean => {
+  const el = t as { isContentEditable?: boolean; tagName?: string } | null;
+  return !!el && (el.isContentEditable === true ||
+    el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT");
+};
 
 /** Mount a Gratify app on a canvas. The entire framework entry point. */
 export function mount<TDoc, TIntent>(

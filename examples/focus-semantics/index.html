@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Gratify — focus, tiers, semantics</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #12141a; }
+    canvas { display: block; touch-action: none; }
+    a.back { position: fixed; top: 10px; left: 14px; color: #828a9c; font: 13px system-ui; text-decoration: none; z-index: 10; }
+    a.back:hover { color: #40baff; }
+    #sem {
+      position: fixed; right: 12px; top: 40px; width: 300px; max-height: 70vh; overflow: auto;
+      background: rgba(24, 27, 36, 0.92); border: 1px solid #2c3140; border-radius: 8px;
+      color: #9aa3b8; font: 11px/1.5 "Cascadia Code", ui-monospace, monospace;
+      padding: 10px 12px; white-space: pre; z-index: 9;
+    }
+    #sem b { color: #40baff; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <a class="back" href="../../index.html">&larr; gallery</a>
+  <div id="sem"></div>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

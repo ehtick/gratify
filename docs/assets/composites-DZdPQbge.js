@@ -1,4 +1,4 @@
-import{m as p,S as g,L as a,R as f,s as b,e as c,f as l,t as w}from"./runtime-Cy-xOfSA.js";import{b as m,L as h,S as y,C as k,w as v,c as u,B as d}from"./widgets-bPTZFe5K.js";import{a as x}from"./source-panel-CSqvtNlY.js";import{w as B}from"./widgets-BJYGvrkn.js";const T=`// ============================================================================\r
+import{m as p,S as g,L as a,R as f,s as b,e as c,f as l,t as w}from"./runtime-oXwbMIQ9.js";import{b as m,L as h,S as y,C as k,w as v,c as u,B as d}from"./widgets-DhpEXluK.js";import{a as x}from"./source-panel-CSqvtNlY.js";import{w as B}from"./widgets-BJYGvrkn.js";const T=`// ============================================================================\r
 // Example: composites — "parts made of parts" (the body facet, layering rung 2).\r
 //\r
 // Two ways to build a widget out of other widgets:\r

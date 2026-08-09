@@ -1,4 +1,4 @@
-import{p as m,v as r,c as h,r as c,h as v,l as f,m as w,F as y,d as l,S as b,L as p}from"./runtime-Cy-xOfSA.js";import{a as C}from"./source-panel-CSqvtNlY.js";const S=`// ============================================================================
+import{p as m,v as r,c as h,r as c,h as v,n as f,m as w,o as y,d as l,S as b,L as p}from"./runtime-oXwbMIQ9.js";import{a as C}from"./source-panel-CSqvtNlY.js";const S=`// ============================================================================
 // Example: island — a DOM element glued to a world-space rect (guide §5e).
 //
 // Text is the one place a canvas UI should surrender to the browser: caret,

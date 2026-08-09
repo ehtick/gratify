@@ -32,6 +32,12 @@ export interface Element {
    *  `dismiss` and is CONSUMED, so click-away closes without also selecting
    *  what's underneath. Set it with `modal(element, dismiss)`. */
   modal?: { dismiss?: unknown };
+  /** Z-tier (adornments): the runtime stable-sorts collected adornments by
+   *  tier before drawing, so overlays (tooltips, drag previews) can reliably
+   *  sit above sibling hosts' adornments. Default 0; equal tiers keep
+   *  document order — untiered apps paint exactly as before. Set it with
+   *  `tier(element, n)`. Higher tiers draw later (above) and hit-test first. */
+  tier?: number;
 }
 
 /** Position an element (adornments, `Free` children): sets the top-left of its
@@ -43,6 +49,11 @@ export const at = (element: Element, pos: Vec): Element => ({ ...element, pos })
  *  — and is consumed. One rule; the whole click-away story. */
 export const modal = (element: Element, dismiss?: unknown): Element =>
   ({ ...element, modal: { dismiss } });
+
+/** Assign an adornment element a z-tier: adornments draw in ascending tier
+ *  order (stable within a tier), so `tier(tooltip, 2)` reliably paints above
+ *  every untiered (tier 0) adornment of every sibling. */
+export const tier = (element: Element, n: number): Element => ({ ...element, tier: n });
 
 export class Instance {
   key: string;

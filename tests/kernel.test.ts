@@ -1040,3 +1040,219 @@ describe("islands", () => {
     expect(el.removed).toBe(true);
   });
 });
+
+// ---- focus model (Tab ring, key routing, Escape, editable-DOM guard) ---------
+import { isEditableDom } from "../src/gratify";
+
+describe("focus model", () => {
+  const FBtn = part("f-btn")
+    .props<{ id: string }>()
+    .intrinsic(40, 20)
+    .render(() => {})
+    .on(Focusable())
+    .press((n) => ({ kind: "hit", id: n.props.id }));
+  const FPlain = part("f-plain").props<Record<string, never>>().intrinsic(40, 20).render(() => {});
+
+  const mk = () => new Runtime<{ hits: string[] }, { kind: "hit"; id: string }>(null, {
+    init: { hits: [] },
+    update: (d, i) => ({ hits: [...d.hits, i.id] }),
+    view: () => Stack("root", {}, [
+      FBtn("a", { id: "a" }), FPlain("mid", {}), FBtn("b", { id: "b" }), FBtn("c", { id: "c" }),
+    ]),
+  }, { headless: true, width: 300, height: 300 });
+
+  it("Tab cycles focus among focusables in document order, wrapping; Shift-Tab reverses", () => {
+    const rt = mk();
+    rt.step(3);
+    expect(rt.focusedKey).toBeNull();
+    expect(rt.key("Tab", { shift: false })).toBe(true);
+    expect(rt.focusedKey).toBe("a");                       // skipped nothing, "mid" is not focusable
+    rt.key("Tab"); expect(rt.focusedKey).toBe("b");
+    rt.key("Tab"); expect(rt.focusedKey).toBe("c");
+    rt.key("Tab"); expect(rt.focusedKey).toBe("a");        // wraps forward
+    rt.key("Tab", { shift: true }); expect(rt.focusedKey).toBe("c");   // wraps backward
+    rt.key("Tab", { shift: true }); expect(rt.focusedKey).toBe("b");
+  });
+
+  it("Enter and Space route to the focused part's press; ch.focus rings it", () => {
+    const rt = mk();
+    rt.step(3);
+    rt.key("Tab", { shift: false });
+    expect(rt.key("Enter")).toBe(true);
+    expect(rt.key(" ")).toBe(true);
+    expect(rt.doc.hits).toEqual(["a", "a"]);
+    rt.step(10);
+    expect(rt.root.children[0].ch.focus).toBeGreaterThan(0.5);   // the render-context flag
+  });
+
+  it("pointer press sets focus; Tab continues from it", () => {
+    const rt = mk();
+    rt.step(3);
+    const r = rt.root.children[2].rect;                    // "b"
+    rt.pointerDown({ x: r.x + 5, y: r.y + 5 });
+    rt.pointerUp({ x: r.x + 5, y: r.y + 5 });
+    expect(rt.focusedKey).toBe("b");
+    rt.key("Tab", { shift: false });
+    expect(rt.focusedKey).toBe("c");
+  });
+
+  it("Escape clears focus and is consumed; with nothing focused it is not", () => {
+    const rt = mk();
+    rt.step(3);
+    rt.key("Tab", { shift: false });
+    expect(rt.key("Escape")).toBe(true);
+    expect(rt.focusedKey).toBeNull();
+    expect(rt.key("Escape")).toBe(false);
+  });
+
+  it("a focused part's own keys map wins over the synthetic Enter press", () => {
+    const KBtn = part("f-kbtn")
+      .props<{ id: string }>()
+      .intrinsic(40, 20)
+      .render(() => {})
+      .on(Focusable())
+      .keys({ Enter: (n) => ({ kind: "hit", id: `mapped:${n.props.id}` }) })
+      .press((n) => ({ kind: "hit", id: `pressed:${n.props.id}` }));
+    const rt = new Runtime<{ hits: string[] }, { kind: "hit"; id: string }>(null, {
+      init: { hits: [] },
+      update: (d, i) => ({ hits: [...d.hits, i.id] }),
+      view: () => Stack("root", {}, [KBtn("k", { id: "k" })]),
+    }, { headless: true, width: 200, height: 100 });
+    rt.step(3);
+    rt.key("Tab", { shift: false });
+    rt.key("Enter");
+    expect(rt.doc.hits).toEqual(["mapped:k"]);   // keys map, not press
+    rt.key(" ");
+    expect(rt.doc.hits).toEqual(["mapped:k", "pressed:k"]);   // no Space mapping → press
+  });
+
+  it("modal Escape still takes precedence over focus-clearing", () => {
+    type LI = { kind: "close" };
+    const Popup = part("f-popup")
+      .props<Record<string, never>>()
+      .local({ open: true })
+      .reduce((_l, i: LI): readonly [{ open: boolean }] => [{ open: i.kind === "close" ? false : true }])
+      .size(() => v(40, 20))
+      .render(() => {})
+      .on(Focusable())
+      .adorn((n) => n.local!.open
+        ? [at(modal(Label("list", { text: "x" }), Local<LI>({ kind: "close" })), v(0, 40))]
+        : []);
+    const rt = new Runtime<number, never>(null, {
+      init: 0, update: (d) => d,
+      view: () => Stack("root", {}, [Popup("p", {})]),
+    }, { headless: true, width: 200, height: 200 });
+    rt.step(3);
+    rt.key("Tab", { shift: false });
+    expect(rt.focusedKey).toBe("p");
+    expect(rt.key("Escape")).toBe(true);      // dismissed the MODAL…
+    rt.step(2);
+    expect(rt.focusedKey).toBe("p");          // …focus survived
+    expect(rt.key("Escape")).toBe(true);      // now Escape clears focus
+    expect(rt.focusedKey).toBeNull();
+  });
+
+  it("editable-DOM guard: keys in inputs belong to the browser (DOM focus wins)", () => {
+    // the window wiring consults this BEFORE Runtime.key — Tab inside a DOM
+    // island never reaches the canvas focus ring.
+    expect(isEditableDom({ tagName: "INPUT" })).toBe(true);
+    expect(isEditableDom({ tagName: "TEXTAREA" })).toBe(true);
+    expect(isEditableDom({ tagName: "SELECT" })).toBe(true);
+    expect(isEditableDom({ tagName: "DIV", isContentEditable: true })).toBe(true);
+    expect(isEditableDom({ tagName: "CANVAS" })).toBe(false);
+    expect(isEditableDom({ tagName: "DIV", isContentEditable: false })).toBe(false);
+    expect(isEditableDom(null)).toBe(false);
+  });
+});
+
+// ---- adorn z-tiers (overlay draw order across hosts) -------------------------
+import { tier } from "../src/gratify";
+
+describe("adorn z-tiers", () => {
+  it("default tier preserves document order exactly; higher tiers sort above ALL lower ones", () => {
+    const Tip = part("zt-tip").props<Record<string, never>>().intrinsic(10, 10).render(() => {});
+    const Host = part("zt-host").props<Record<string, never>>().intrinsic(40, 40).render(() => {});
+    // host A: an untiered badge + a tier-2 tooltip; host B: an untiered badge + a tier-1 preview
+    const HostA = derivePart("zt-a", Host,
+      addAdorn(() => [at(Tip("badge", {}), v(0, 0)), tier(at(Tip("tip", {}), v(0, 0)), 2)]));
+    const HostB = derivePart("zt-b", Host,
+      addAdorn(() => [at(Tip("badge", {}), v(0, 0)), tier(at(Tip("preview", {}), v(0, 0)), 1)]));
+    const rt = new Runtime<number, never>(null, {
+      init: 0, update: (d) => d,
+      view: () => Stack("root", {}, [HostA("a", {}), HostB("b", {})]),
+    }, { headless: true, width: 300, height: 300 });
+    rt.step(3);
+    const ar = (rt as unknown as { adornRoot: { children: { key: string }[] } }).adornRoot;
+    // draw order = child order: tier 0 in document order (a before b), then 1, then 2.
+    expect(ar.children.map((c) => c.key)).toEqual(["a::badge", "b::badge", "b::preview", "a::tip"]);
+  });
+
+  it("untiered adornments alone keep today's order (behavior-preserving)", () => {
+    const Tip = part("zt-tip0").props<Record<string, never>>().intrinsic(10, 10).render(() => {});
+    const Host = part("zt-host0").props<Record<string, never>>().intrinsic(40, 40).render(() => {});
+    const HostA = derivePart("zt-a0", Host, addAdorn(() => [at(Tip("t1", {}), v(0, 0)), at(Tip("t2", {}), v(0, 0))]));
+    const HostB = derivePart("zt-b0", Host, addAdorn(() => [at(Tip("t3", {}), v(0, 0))]));
+    const rt = new Runtime<number, never>(null, {
+      init: 0, update: (d) => d,
+      view: () => Stack("root", {}, [HostA("a", {}), HostB("b", {})]),
+    }, { headless: true, width: 300, height: 300 });
+    rt.step(3);
+    const ar = (rt as unknown as { adornRoot: { children: { key: string }[] } }).adornRoot;
+    expect(ar.children.map((c) => c.key)).toEqual(["a::t1", "a::t2", "b::t3"]);
+  });
+});
+
+// ---- semantics slot (queryable tree, no DOM) ---------------------------------
+describe("semantics slot", () => {
+  it("collects declared parts into a nested tree with keys, paths, and rects", () => {
+    const SBtn = part("sm-btn").props<{ label: string }>().intrinsic(50, 20).render(() => {})
+      .semantics((n) => ({ role: "button", label: n.props.label }));
+    const SVal = part("sm-val").props<{ v: number }>().intrinsic(50, 20).render(() => {})
+      .semantics((n) => ({ role: "slider", label: "volume", value: n.props.v }));
+    const Panel = part("sm-panel").props<Record<string, never>>().render(() => {})
+      .semantics(() => ({ role: "group", label: "controls" }));
+
+    const rt = new Runtime<number, never>(null, {
+      init: 0, update: (d) => d,
+      view: () => Stack("root", { gap: 0, pad: 0 }, [
+        // "inner" has NO semantics — it must be transparent in the tree
+        Panel("p", {}, [Stack("inner", { gap: 0, pad: 0 }, [
+          SBtn("ok", { label: "OK" }), SVal("vol", { v: 7 }),
+        ])]),
+        SBtn("solo", { label: "Solo" }),
+      ]),
+    }, { headless: true, width: 300, height: 300 });
+    rt.step(120);   // let layout settle so rects are honest
+
+    const tree = rt.semanticsTree();
+    expect(tree.map((n) => [n.key, n.role])).toEqual([["p", "group"], ["solo", "button"]]);
+    // the facet-less "inner" stack surfaced its children to the panel
+    expect(tree[0].children.map((n) => [n.key, n.role, n.label])).toEqual([
+      ["ok", "button", "OK"], ["vol", "slider", "volume"],
+    ]);
+    expect(tree[0].children[1].value).toBe(7);
+    expect(tree[0].children[0].path).toBe("root/p/inner/ok");
+    expect(tree[1].path).toBe("root/solo");
+    // world rects: vol is the second 20px row inside the panel
+    const r = tree[0].children[1].rect;
+    expect(r.w).toBe(50);
+    expect(Math.abs(r.y - 20)).toBeLessThan(1);
+    // solo sits below the whole panel
+    expect(tree[1].rect.y).toBeGreaterThan(35);
+  });
+
+  it("a facet returning null omits the node that frame", () => {
+    const Maybe = part("sm-maybe").props<{ show: boolean }>().intrinsic(10, 10).render(() => {})
+      .semantics((n) => (n.props.show ? { role: "note" } : null));
+    const rt = new Runtime<{ show: boolean }, { kind: "set"; show: boolean }>(null, {
+      init: { show: true },
+      update: (_d, i) => ({ show: i.show }),
+      view: (d) => Stack("root", {}, [Maybe("m", { show: d.show })]),
+    }, { headless: true, width: 100, height: 100 });
+    rt.step(3);
+    expect(rt.semanticsTree().length).toBe(1);
+    rt.dispatch({ kind: "set", show: false });
+    rt.step(1);
+    expect(rt.semanticsTree().length).toBe(0);
+  });
+});

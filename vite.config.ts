@@ -34,6 +34,7 @@ export default defineConfig({
         dropdown: resolve(__dirname, "examples/dropdown/index.html"),
         island: resolve(__dirname, "examples/island/index.html"),
         "three-transform": resolve(__dirname, "examples/three-transform/index.html"),
+        "focus-semantics": resolve(__dirname, "examples/focus-semantics/index.html"),
       },
     },
   },
