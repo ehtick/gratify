@@ -3,9 +3,12 @@
 // (or a future widget library) ship widgets.
 
 import {
-  addOn, calpha, Drag1D, Element, GNode, Intentish, Label, part, Press, rect, Row, Stack,
-  surface, v, withExt,
+  addOn, calpha, Drag1D, Element, Gesture, GNode, Intentish, Label, part, Press, rect, Row,
+  Stack, surface, v, withExt,
 } from "gratify";
+import {
+  dragMax, dragMin, fracOfValue, pxOfValue, RangeZone, shiftWindow, valueOfPx, zoneAt,
+} from "./range-math";
 
 // ---- Button -----------------------------------------------------------------
 // The style record is INFERRED from `style`'s return value — no named interface,
@@ -120,6 +123,101 @@ export const Slider = part<SliderProps>()("slider", {
     p.glow(s.fill, s.glow, () => p.dot(v(x + w * t, y), s.knobR, s.knob));
   },
   on: [Drag1D({ axis: "x", to: (node, f) => node.props.set(f) })],
+});
+
+// ---- Range (dual-thumb min..max slider) --------------------------------------
+// A horizontal track with two thumbs and a filled span between them. Dragging a
+// thumb edits min or max (they can't cross); dragging the fill between them
+// shifts the whole window, width preserved. Values live in a real domain
+// [lo, hi] with an optional step. Emits `set(min, max)` per move — the host
+// coalesces (undo middleware, param write-coalescing, etc.). While the pointer
+// is down, value labels ride above the thumbs. All the value math is in
+// range-math.ts (pure, kernel-tested).
+export interface RangeProps {
+  min: number;
+  max: number;
+  lo: number;
+  hi: number;
+  step?: number;
+  set(min: number, max: number): Intentish;
+  width?: number;
+  /** Label formatting during drag; default trims to the step's precision. */
+  fmt?(value: number): string;
+}
+
+const PAD = 10;              // track inset — room for thumbs at the extremes
+const THUMB = 7;             // thumb radius
+
+const rangeFmt = (props: RangeProps) => (value: number): string => {
+  if (props.fmt) return props.fmt(value);
+  const step = props.step ?? 0;
+  const decimals = step >= 1 ? 0 : step > 0 ? Math.ceil(-Math.log10(step)) : 2;
+  return value.toFixed(decimals);
+};
+
+interface RangeDrag {
+  zone: RangeZone;
+  startMin: number;
+  startMax: number;
+  startX: number;
+}
+
+export const Range = part<RangeProps>()("range", {
+  size: (props) => v(props.width ?? 170, 34),
+  style: (t, ch) => ({
+    track: t.muted,
+    fill: t.accent,
+    thumb: t.mix(t.textBright, t.accent, 0.3 * ch.hover),
+    thumbR: THUMB + 1.5 * ch.hover,
+    glow: 9 * ch.hover,
+    label: t.textBright,
+    tag: calpha(t.bg, 0.75),
+    drag: ch.press,                  // labels ride the press channel
+  }),
+  render(node, p, s) {
+    const props = node.props;
+    const r = node.rect;
+    const d = { lo: props.lo, hi: props.hi, step: props.step };
+    const x = r.x + PAD, w = r.w - 2 * PAD, y = r.center.y;
+    const xMin = pxOfValue(props.min, d, x, w);
+    const xMax = pxOfValue(props.max, d, x, w);
+    p.box(rect(x, y - 2.5, w, 5), 2.5, s.track);
+    p.box(rect(xMin, y - 2.5, Math.max(0, xMax - xMin), 5), 2.5, s.fill);
+    for (const tx of [xMin, xMax])
+      p.glow(s.fill, s.glow, () => p.dot(v(tx, y), s.thumbR, s.thumb));
+    if (s.drag > 0.05) {
+      const fmt = rangeFmt(props);
+      const labels = [[xMin, fmt(props.min)], [xMax, fmt(props.max)]] as const;
+      for (const [tx, text] of labels) {
+        const lw = 8 + text.length * 6.5;
+        p.box(rect(tx - lw / 2, y - 26, lw, 14), 4, calpha(s.tag, s.drag));
+        p.label(text, v(tx, y - 19), calpha(s.label, s.drag), { size: 10, weight: 600 });
+      }
+    }
+  },
+  on: [
+    Gesture<RangeProps, RangeDrag>({
+      begin(node, pointer) {
+        const props = node.props;
+        const d = { lo: props.lo, hi: props.hi, step: props.step };
+        const x = node.rect.x + PAD, w = node.rect.w - 2 * PAD;
+        const f = w > 0 ? (pointer.x - x) / w : 0;
+        const zone = zoneAt(f, fracOfValue(props.min, d), fracOfValue(props.max, d), THUMB * 1.5 / Math.max(w, 1));
+        return { zone, startMin: props.min, startMax: props.max, startX: pointer.x };
+      },
+      during(st, node, pointer) {
+        const props = node.props;
+        const d = { lo: props.lo, hi: props.hi, step: props.step };
+        const x = node.rect.x + PAD, w = node.rect.w - 2 * PAD;
+        const next =
+          st.zone === "min" ? dragMin(valueOfPx(pointer.x, d, x, w), props.max, d)
+          : st.zone === "max" ? dragMax(props.min, valueOfPx(pointer.x, d, x, w), d)
+          : shiftWindow(st.startMin, st.startMax,
+              (pointer.x - st.startX) / Math.max(w, 1) * (d.hi - d.lo), d);
+        return props.set(next.min, next.max);
+      },
+    }),
+  ],
 });
 
 // ---- Icon button (×) ---------------------------------------------------------

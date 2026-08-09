@@ -20,7 +20,7 @@ import {
   calpha, clamp, cmix, Color, Drag1D, Free, Gesture, GNode, hexOf, hsl, mount,
   Painter, Pan, part, Press, rect, Rect, Tokens, Channels, v, Vec, vdist, Element,
 } from "gratify";
-import { Card } from "../shared/widgets";
+import { Card, Range } from "../shared/widgets";
 
 import { attachSourcePanel } from "../shared/source-panel";
 import mainSource from "./main.ts?raw";
@@ -75,7 +75,7 @@ const degOf = (rad: number) => ((rad * 180) / Math.PI + 360) % 360;
 
 interface Doc {
   scalar: number;                                   // 0..1
-  range: { min: number; max: number };              // 0..1
+  range: { min: number; max: number };              // 0..100, step 1
   scrub: number;                                    // unbounded
   ease: { x1: number; y1: number; x2: number; y2: number };   // cubic-bezier handles, 0..1
   angle: number;                                    // degrees
@@ -142,38 +142,10 @@ const SliderCtl = part<{ value: number }>()("w-slider", {
   on: [Drag1D({ axis: "x", pad: 8, to: (_n, f) => ({ kind: "scalar", value: f }) })],
 });
 
-// ── 2. Range (min..max) — Gesture, nearest thumb ──────────────────────────────
-
-const RangeCtl = part<{ min: number; max: number }>()("w-range", {
-  size: () => v(CW, CH),
-  style: (t, ch) => ctrl(t, ch),
-  render: (node, paint, s) => {
-    const p = node.props, r = node.rect;
-    const inner = rect(r.x + 8, r.y, r.w - 16, r.h);
-    const y = inner.center.y;
-    paint.box(rect(inner.x, y - 2.5, inner.w, 5), 2.5, s.muted);
-    const xMin = inner.x + inner.w * p.min, xMax = inner.x + inner.w * p.max;
-    paint.box(rect(xMin, y - 2.5, xMax - xMin, 5), 2.5, s.accent);
-    thumb(paint, v(xMin, y), 7, s.glow, s.accent, s.thumb);
-    thumb(paint, v(xMax, y), 7, s.glow, s.accent, s.thumb);
-  },
-  on: [
-    Gesture<{ min: number; max: number }, { which: "min" | "max" }>({
-      begin(node, pointer) {
-        const inner = rect(node.rect.x + 8, node.rect.y, node.rect.w - 16, node.rect.h);
-        const f = clamp((pointer.x - inner.x) / inner.w, 0, 1);
-        return { which: Math.abs(f - node.props.min) <= Math.abs(f - node.props.max) ? "min" : "max" };
-      },
-      during(state, node, pointer) {
-        const inner = rect(node.rect.x + 8, node.rect.y, node.rect.w - 16, node.rect.h);
-        const f = clamp((pointer.x - inner.x) / inner.w, 0, 1);
-        const { min, max } = node.props;
-        const value = state.which === "min" ? { min: Math.min(f, max), max } : { min, max: Math.max(f, min) };
-        return { kind: "range", value };
-      },
-    }),
-  ],
-});
+// ── 2. Range (min..max) — the shared catalog Range (widgets.ts) ───────────────
+// Dual thumbs, window drag between them, domain 0..100 with step 1, and value
+// labels above the thumbs while dragging. Thumb math lives in
+// shared/range-math.ts (pure, kernel-tested in tests/range-math.test.ts).
 
 // ── 3. Number scrub — Gesture, relative horizontal drag ───────────────────────
 
@@ -624,7 +596,9 @@ const cell = (i: number, title: string, value: string, ctl: Element): Element =>
 function view(doc: Doc): Element {
   const cards: Element[] = [
     cell(0, "Slider", doc.scalar.toFixed(2), SliderCtl("c", { value: doc.scalar })),
-    cell(1, "Range", `${doc.range.min.toFixed(2)}–${doc.range.max.toFixed(2)}`, RangeCtl("c", { min: doc.range.min, max: doc.range.max })),
+    cell(1, "Range", `${doc.range.min}–${doc.range.max}`,
+      Range("c", { min: doc.range.min, max: doc.range.max, lo: 0, hi: 100, step: 1, width: CW,
+        set: (min, max) => ({ kind: "range", value: { min, max } }) })),
     cell(2, "Number", doc.scrub.toFixed(1), NumberScrubCtl("c", { value: doc.scrub })),
     cell(3, "Ease", `${doc.ease.x1.toFixed(2)},${doc.ease.y1.toFixed(2)},${doc.ease.x2.toFixed(2)},${doc.ease.y2.toFixed(2)}`,
       BezierRampCtl("c", { ...doc.ease })),
@@ -650,7 +624,7 @@ const canvas = document.getElementById("c") as HTMLCanvasElement;
 mount(canvas, {
   init: {
     scalar: 0.4,
-    range: { min: 0.25, max: 0.75 },
+    range: { min: 25, max: 75 },
     scrub: 42,
     ease: { x1: 0.42, y1: 0, x2: 0.58, y2: 1 },   // ease-in-out
     angle: 45,
