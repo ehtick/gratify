@@ -1,4 +1,4 @@
-import{p,D as $,r as h,v as i,G as C,q as d,c as w,u as E,h as k,b as W,P as G,n as L,m as K,E as R,o as J}from"./runtime-oXwbMIQ9.js";import{b as Q}from"./widgets-DhpEXluK.js";import{a as Z}from"./source-panel-CSqvtNlY.js";import{w as nn}from"./widgets-BJYGvrkn.js";const rn=`// ============================================================================\r
+import{p,D as $,r as h,v as i,G as C,q as d,c as w,u as E,h as k,b as W,P as G,n as L,m as K,E as R,o as J}from"./runtime-BPRGWDPy.js";import{b as Q}from"./widgets-CEIqMvAT.js";import{a as Z}from"./source-panel-CSqvtNlY.js";import{w as nn}from"./widgets-BJYGvrkn.js";const rn=`// ============================================================================\r
 // Example: widget board — a dozen-plus creative-tool controls, reimplemented\r
 // from the Kea node editor's widget library, now as COMPOSITES.\r
 //\r

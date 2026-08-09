@@ -90,9 +90,14 @@ function arrangeInst(inst: Instance, target: Rect, memo: MeasureMemo, eff: Eff) 
   }
 }
 
-function stepRects(inst: Instance, dt: number) {
+function stepRects(inst: Instance, dt: number, snap: boolean) {
   const t = inst.target;
-  if (!inst.placed) {
+  if (!inst.placed || (snap && !inst.exiting)) {
+    // `snap`: overlay trees (adorn, gesture) position their elements from the
+    // HOST's already-spring-animated rect — springing again toward that moving
+    // target compounds the lag (a spring chasing a spring), so overlay
+    // instances pin to their targets every frame. Enter/exit still animate
+    // via channels; exiting ghosts keep their last rect.
     inst.sx.set(t.x); inst.sy.set(t.y); inst.cw = t.w; inst.chh = t.h;
     inst.placed = true;
   } else if (!inst.exiting) {
@@ -102,15 +107,17 @@ function stepRects(inst: Instance, dt: number) {
     inst.chh = approach(inst.chh, t.h, SIZE_RATE, dt);
   }
   inst.rect = new Rect(inst.sx.v, inst.sy.v, inst.cw, inst.chh);
-  for (const c of inst.children) stepRects(c, dt);
-  for (const g of inst.ghosts) stepRects(g, dt);
+  for (const c of inst.children) stepRects(c, dt, snap);
+  for (const g of inst.ghosts) stepRects(g, dt, snap);
 }
 
 /** One full layout pass over a tree: measure from the viewport down, arrange
- *  into the final rects, then step the channels that make it glide. */
-export function layoutScene(root: Instance, dt: number, eff: Eff, m: Measure, viewW: number, viewH: number) {
+ *  into the final rects, then step the channels that make it glide.
+ *  `snapPos` pins positions to targets instead of springing — for overlay
+ *  trees whose targets are computed from already-animated host rects. */
+export function layoutScene(root: Instance, dt: number, eff: Eff, m: Measure, viewW: number, viewH: number, snapPos = false) {
   const memo = new MeasureMemo(eff, m);
   const s = memo.measure(root, v(viewW, viewH));      // PASS 1: measure
   arrangeInst(root, new Rect(0, 0, Math.max(s.x, viewW), Math.max(s.y, viewH)), memo, eff);   // PASS 2: arrange
-  stepRects(root, dt);                                // channels consume arrange targets
+  stepRects(root, dt, snapPos);                       // channels consume arrange targets
 }

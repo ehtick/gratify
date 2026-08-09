@@ -456,7 +456,7 @@ export class Runtime<TDoc, TIntent> {
     if (els.length || this.gestureRoot?.children.length || this.gestureRoot?.ghosts.length) {
       const rootEl: Element = { key: "__gestures", part: GESTURE_ROOT, props: {}, children: els, layer: "overlay" };
       this.gestureRoot = reconcile(this.gestureRoot, expandBodies(rootEl, this.localOf(this.gestureRoot)));
-      layoutScene(this.gestureRoot, dt, eff, this.painter.measure, this.viewW, this.viewH);
+      layoutScene(this.gestureRoot, dt, eff, this.painter.measure, this.viewW, this.viewH, true);
     } else {
       this.gestureRoot = null;
     }
@@ -487,7 +487,7 @@ export class Runtime<TDoc, TIntent> {
     if (kids.length || this.adornRoot?.children.length || this.adornRoot?.ghosts.length) {
       const rootEl: Element = { key: "__adorn", part: ADORN_ROOT, props: {}, children: kids, layer: "overlay" };
       this.adornRoot = reconcile(this.adornRoot, expandBodies(rootEl, this.localOf(this.adornRoot)));
-      layoutScene(this.adornRoot, dt, eff, this.painter.measure, this.viewW, this.viewH);
+      layoutScene(this.adornRoot, dt, eff, this.painter.measure, this.viewW, this.viewH, true);
     } else {
       this.adornRoot = null;
     }

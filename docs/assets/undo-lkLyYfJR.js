@@ -1,4 +1,4 @@
-import{p as u,m as h,S as l,L as d,R as a,h as s,v as c}from"./runtime-oXwbMIQ9.js";import{w as p}from"./middleware-DnFxgLOc.js";import{B as o}from"./widgets-DhpEXluK.js";import{a as m}from"./source-panel-CSqvtNlY.js";const f=`// ============================================================================
+import{p as u,m as h,S as l,L as d,R as a,h as s,v as c}from"./runtime-BPRGWDPy.js";import{w as p}from"./middleware-DnFxgLOc.js";import{B as o}from"./widgets-CEIqMvAT.js";import{a as m}from"./source-panel-CSqvtNlY.js";const f=`// ============================================================================
 // Example: undo — app-wide policies as update middleware.
 //
 // What to look for when you run it:

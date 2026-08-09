@@ -1256,3 +1256,28 @@ describe("semantics slot", () => {
     expect(rt.semanticsTree().length).toBe(0);
   });
 });
+
+// ---- overlay snap (adorn/gesture trees pin to targets, no double spring) ----
+describe("overlay position snap", () => {
+  it("an adornment tracks its (host-derived) target exactly each frame", () => {
+    const Dot = part<Record<string, never>>("snap-dot", { size: () => v(10, 10), render() {} });
+    const HostBase = part<{ x: number }>("snap-host", { size: () => v(40, 40), render() {} });
+    // Adorn position derives from the doc-driven prop, mimicking "glued to the
+    // host rect": the adorn target moves whenever the doc does.
+    const Host = derivePart("snap-host2", HostBase,
+      addAdorn((n) => [at(Dot("d", {}), v(n.props.x + 100, 20))]),
+    );
+
+    const rt = new Runtime<{ x: number }, { kind: "mv"; x: number }>(null, {
+      init: { x: 0 },
+      update: (d, i) => (i.kind === "mv" ? { x: i.x } : d),
+      view: (d) => Stack("root", {}, [Host("h", { x: d.x })]),
+    }, { headless: true, width: 300, height: 200 });
+
+    rt.step(5);
+    rt.dispatch({ kind: "mv", x: 80 });
+    rt.step(1);                                      // ONE frame after the move
+    const ar = (rt as unknown as { adornRoot: { children: { rect: { x: number } }[] } }).adornRoot;
+    expect(ar.children[0].rect.x).toBe(180);         // pinned to target, zero lag
+  });
+});
