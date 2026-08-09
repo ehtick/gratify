@@ -3,9 +3,12 @@ const r=`// Shared example widgets — each one is a single part() definition (R
 // (or a future widget library) ship widgets.\r
 \r
 import {\r
-  addOn, calpha, Drag1D, Element, GNode, Intentish, Label, part, Press, rect, Row, Stack,\r
-  surface, v, withExt,\r
+  addOn, calpha, Drag1D, Element, Gesture, GNode, Intentish, Label, part, Press, rect, Row,\r
+  Stack, surface, v, withExt,\r
 } from "gratify";\r
+import {\r
+  dragMax, dragMin, fracOfValue, pxOfValue, RangeZone, shiftWindow, valueOfPx, zoneAt,\r
+} from "./range-math";\r
 \r
 // ---- Button -----------------------------------------------------------------\r
 // The style record is INFERRED from \`style\`'s return value — no named interface,\r
@@ -120,6 +123,101 @@ export const Slider = part<SliderProps>()("slider", {\r
     p.glow(s.fill, s.glow, () => p.dot(v(x + w * t, y), s.knobR, s.knob));\r
   },\r
   on: [Drag1D({ axis: "x", to: (node, f) => node.props.set(f) })],\r
+});\r
+\r
+// ---- Range (dual-thumb min..max slider) --------------------------------------\r
+// A horizontal track with two thumbs and a filled span between them. Dragging a\r
+// thumb edits min or max (they can't cross); dragging the fill between them\r
+// shifts the whole window, width preserved. Values live in a real domain\r
+// [lo, hi] with an optional step. Emits \`set(min, max)\` per move — the host\r
+// coalesces (undo middleware, param write-coalescing, etc.). While the pointer\r
+// is down, value labels ride above the thumbs. All the value math is in\r
+// range-math.ts (pure, kernel-tested).\r
+export interface RangeProps {\r
+  min: number;\r
+  max: number;\r
+  lo: number;\r
+  hi: number;\r
+  step?: number;\r
+  set(min: number, max: number): Intentish;\r
+  width?: number;\r
+  /** Label formatting during drag; default trims to the step's precision. */\r
+  fmt?(value: number): string;\r
+}\r
+\r
+const PAD = 10;              // track inset — room for thumbs at the extremes\r
+const THUMB = 7;             // thumb radius\r
+\r
+const rangeFmt = (props: RangeProps) => (value: number): string => {\r
+  if (props.fmt) return props.fmt(value);\r
+  const step = props.step ?? 0;\r
+  const decimals = step >= 1 ? 0 : step > 0 ? Math.ceil(-Math.log10(step)) : 2;\r
+  return value.toFixed(decimals);\r
+};\r
+\r
+interface RangeDrag {\r
+  zone: RangeZone;\r
+  startMin: number;\r
+  startMax: number;\r
+  startX: number;\r
+}\r
+\r
+export const Range = part<RangeProps>()("range", {\r
+  size: (props) => v(props.width ?? 170, 34),\r
+  style: (t, ch) => ({\r
+    track: t.muted,\r
+    fill: t.accent,\r
+    thumb: t.mix(t.textBright, t.accent, 0.3 * ch.hover),\r
+    thumbR: THUMB + 1.5 * ch.hover,\r
+    glow: 9 * ch.hover,\r
+    label: t.textBright,\r
+    tag: calpha(t.bg, 0.75),\r
+    drag: ch.press,                  // labels ride the press channel\r
+  }),\r
+  render(node, p, s) {\r
+    const props = node.props;\r
+    const r = node.rect;\r
+    const d = { lo: props.lo, hi: props.hi, step: props.step };\r
+    const x = r.x + PAD, w = r.w - 2 * PAD, y = r.center.y;\r
+    const xMin = pxOfValue(props.min, d, x, w);\r
+    const xMax = pxOfValue(props.max, d, x, w);\r
+    p.box(rect(x, y - 2.5, w, 5), 2.5, s.track);\r
+    p.box(rect(xMin, y - 2.5, Math.max(0, xMax - xMin), 5), 2.5, s.fill);\r
+    for (const tx of [xMin, xMax])\r
+      p.glow(s.fill, s.glow, () => p.dot(v(tx, y), s.thumbR, s.thumb));\r
+    if (s.drag > 0.05) {\r
+      const fmt = rangeFmt(props);\r
+      const labels = [[xMin, fmt(props.min)], [xMax, fmt(props.max)]] as const;\r
+      for (const [tx, text] of labels) {\r
+        const lw = 8 + text.length * 6.5;\r
+        p.box(rect(tx - lw / 2, y - 26, lw, 14), 4, calpha(s.tag, s.drag));\r
+        p.label(text, v(tx, y - 19), calpha(s.label, s.drag), { size: 10, weight: 600 });\r
+      }\r
+    }\r
+  },\r
+  on: [\r
+    Gesture<RangeProps, RangeDrag>({\r
+      begin(node, pointer) {\r
+        const props = node.props;\r
+        const d = { lo: props.lo, hi: props.hi, step: props.step };\r
+        const x = node.rect.x + PAD, w = node.rect.w - 2 * PAD;\r
+        const f = w > 0 ? (pointer.x - x) / w : 0;\r
+        const zone = zoneAt(f, fracOfValue(props.min, d), fracOfValue(props.max, d), THUMB * 1.5 / Math.max(w, 1));\r
+        return { zone, startMin: props.min, startMax: props.max, startX: pointer.x };\r
+      },\r
+      during(st, node, pointer) {\r
+        const props = node.props;\r
+        const d = { lo: props.lo, hi: props.hi, step: props.step };\r
+        const x = node.rect.x + PAD, w = node.rect.w - 2 * PAD;\r
+        const next =\r
+          st.zone === "min" ? dragMin(valueOfPx(pointer.x, d, x, w), props.max, d)\r
+          : st.zone === "max" ? dragMax(props.min, valueOfPx(pointer.x, d, x, w), d)\r
+          : shiftWindow(st.startMin, st.startMax,\r
+              (pointer.x - st.startX) / Math.max(w, 1) * (d.hi - d.lo), d);\r
+        return props.set(next.min, next.max);\r
+      },\r
+    }),\r
+  ],\r
 });\r
 \r
 // ---- Icon button (×) ---------------------------------------------------------\r
